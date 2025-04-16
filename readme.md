@@ -1,4 +1,3 @@
-```markdown
 # Django Authentication System
 
 This is a Django-based RESTful API for user authentication, supporting login, signup with OTP (One-Time Password), profile completion, and account blocking for security. It uses Django REST Framework to provide endpoints for user management.
@@ -185,4 +184,3 @@ This project is licensed under the MIT License.
 ## Contact
 
 For issues or suggestions, open an issue on GitHub or contact [your-email@example.com].
-```
