@@ -1,6 +1,6 @@
 
 PHONE_SUCCESS="09191111111"
-PHONE_FAIL="09190000000
+PHONE_FAIL="09190000000"
 
 # 1. تست درخواست OTP برای کاربر جدید (موفق)
 echo "OTP request test for $PHONE_SUCCESS:"
@@ -8,6 +8,16 @@ RESPONSE=$(curl -s -X POST http://localhost:8000/api/otp/request/ \
 -H "Content-Type: application/json" \
 -d "{\"phone_number\": \"$PHONE_SUCCESS\"}")
 echo "$RESPONSE"
+
+# استخراج کد OTP از پاسخ (فرض می‌کنیم پاسخ JSON است)
+OTP_CODE=$(echo "$RESPONSE" | grep -oE '[0-9]{6}')
+if [ -z "$OTP_CODE" ]; then
+    echo "error: OTP code not received!"
+    exit 1
+fi
+
+echo "Extracted OTP code: $OTP_CODE"
+
 
 # 2. تست تأیید OTP با کد درست برای شماره موفق
 echo -e "\n\nOTP verifying test for $PHONE_SUCCESS:"
@@ -23,7 +33,8 @@ curl -X POST http://localhost:8000/api/otp/request/ \
 -d "{\"phone_number\": \"$PHONE_FAIL\"}"
 
 # 4. تست سه بار تلاش ناموفق برای تأیید OTP و بلاک شدن
-echo -e "\n\nthree failed attempt (otp verifying) test for $PHONE_FAIL:"
+#(otp verifying)
+echo -e "\n\nthree failed attempt test for $PHONE_FAIL:" 
 for i in {1..3}; do
     curl -X POST http://localhost:8000/api/otp/verify/ \
     -H "Content-Type: application/json" \
@@ -51,7 +62,8 @@ curl -X POST http://localhost:8000/api/login/ \
 -d "{\"phone_number\": \"$PHONE_SUCCESS\", \"password\": \"newpassword123\"}"
 
 # 8. تست سه بار تلاش ناموفق ورود با رمز اشتباه و بلاک شدن
-echo -e "\n\nthree failed attempt (logging in with password) test for $PHONE_SUCCESS:"
+# (logging in with password)
+echo -e "\n\nthree failed attempt test for $PHONE_SUCCESS:" 
 for i in {1..3}; do
     curl -X POST http://localhost:8000/api/login/ \
     -H "Content-Type: application/json" \
