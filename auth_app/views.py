@@ -7,16 +7,31 @@ from django.db import IntegrityError
 from django.utils import timezone
 from django.db.models import Q
 from datetime import timedelta
+from rest_framework.authentication import SessionAuthentication
 
 from .serializers import LoginSerializer, OTPSerializer, OTPVerifySerializer, UserProfileSerializer
 from .models import CustomUser, OTPCode, Block
 
 
+# Custom CSRFExemptSessionAuthentication to disable CSRF checks
+class CSRFExemptSessionAuthentication(SessionAuthentication):
+    def enforce_csrf(self, request):
+        # Disable CSRF check
+        return
+
+def get_client_ip(request):
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
+
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        ip = request.META.get('REMOTE_ADDR')
+        ip = get_client_ip(request)
         phone_number = request.data.get('phone_number')
 
         # block check
@@ -24,6 +39,7 @@ class LoginView(APIView):
             Q(ip_address=ip) | Q(phone_number=phone_number),
             blocked_until__gt=timezone.now()
         ).order_by('-blocked_until').first()
+        
         if block:
             return Response({"error": f"phone number {phone_number} is blocked until {block.blocked_until}."}, status=status.HTTP_403_FORBIDDEN)
 
@@ -31,12 +47,15 @@ class LoginView(APIView):
         if serializer.is_valid():
             user = CustomUser.objects.get(phone_number=serializer.validated_data['phone_number'])
             login(request, user)
+
             return Response({"message": f"{phone_number} is logged in."}, status=status.HTTP_200_OK)
+       
         else:
             # failed attempt record and block check
             failed_attempts = Block.objects.filter(
                 ip_address=ip, phone_number=phone_number, reason="login_failure"
             ).count()
+          
             if failed_attempts >= 2:
                 Block.objects.create(
                     ip_address=ip,
@@ -45,6 +64,7 @@ class LoginView(APIView):
                     reason="login_failure"
                 )
                 return Response({"error": f"phone number {phone_number} is blocked for 1 hour becouse of 3 failled attemp."}, status=status.HTTP_403_FORBIDDEN)
+           
             Block.objects.create(
                 ip_address=ip,
                 phone_number=phone_number,
@@ -53,11 +73,12 @@ class LoginView(APIView):
             )
             return Response({"error": f"Logging in with phone number {phone_number} is failled: wronge phonenuber or password."}, status=status.HTTP_400_BAD_REQUEST)
 
+
 class OTPRequestView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        ip = request.META.get('REMOTE_ADDR')
+        ip = get_client_ip(request)
         phone_number = request.data.get('phone_number')
 
         # block check
@@ -65,6 +86,7 @@ class OTPRequestView(APIView):
             Q(ip_address=ip) | Q(phone_number=phone_number),
             blocked_until__gt=timezone.now()
         ).order_by('-blocked_until').first()
+       
         if block:
             return Response({"error": f"phone number {phone_number} is blocked until {block.blocked_until}."}, status=status.HTTP_403_FORBIDDEN)
 
@@ -72,13 +94,14 @@ class OTPRequestView(APIView):
         if serializer.is_valid():
             code = serializer.create_otp()
             return Response({"message": f"OTP code for phone number {phone_number}: {code}"}, status=status.HTTP_200_OK)
+        
         return Response({"error": f"OTP code request for {phone_number} is failled: {serializer.errors}"}, status=status.HTTP_400_BAD_REQUEST)
 
 class OTPVerifyView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        ip = request.META.get('REMOTE_ADDR')
+        ip = get_client_ip(request)
         phone_number = request.data.get('phone_number')
 
         # block check
@@ -86,6 +109,7 @@ class OTPVerifyView(APIView):
             Q(ip_address=ip) | Q(phone_number=phone_number),
             blocked_until__gt=timezone.now()
         ).order_by('-blocked_until').first()
+      
         if block:
             return Response({"error": f"phone number {phone_number} is blocked until {block.blocked_until}."}, status=status.HTTP_403_FORBIDDEN)
 
@@ -97,6 +121,7 @@ class OTPVerifyView(APIView):
                 failed_attempts = Block.objects.filter(
                     ip_address=ip, phone_number=phone_number, reason="otp_failure"
                 ).count()
+               
                 if failed_attempts >= 2:
                     Block.objects.create(
                         ip_address=ip,
@@ -105,6 +130,7 @@ class OTPVerifyView(APIView):
                         reason="otp_failure"
                     )
                     return Response({"error": f"phone number {phone_number} is blocked for 1 hour becouse of 3 failled attemp."}, status=status.HTTP_403_FORBIDDEN)
+                
                 Block.objects.create(
                     ip_address=ip,
                     phone_number=phone_number,
@@ -128,6 +154,7 @@ class OTPVerifyView(APIView):
                 )
                 login(request, user)
                 return Response({"message": f"verifying OTP for {phone_number} is susuccessful. please complete your profile."}, status=status.HTTP_201_CREATED)
+            
             except IntegrityError:
                 return Response({"error": f"error in registering{phone_number}. please try again."}, status=status.HTTP_400_BAD_REQUEST)
         else:
@@ -143,6 +170,7 @@ class OTPVerifyView(APIView):
                     reason="otp_failure"
                 )
                 return Response({"error": f"phone number {phone_number} is blocked for 1 hour becouse of 3 failled attemp."}, status=status.HTTP_403_FORBIDDEN)
+            
             Block.objects.create(
                 ip_address=ip,
                 phone_number=phone_number,
@@ -153,6 +181,8 @@ class OTPVerifyView(APIView):
 
 
 class UserProfileView(APIView):
+    authentication_classes = [CSRFExemptSessionAuthentication]
+
     def post(self, request):
         if not request.user.is_authenticated:
             return Response({"error": f"please enter with {request.data.get('phone_number', 'نامشخص')} first."}, status=status.HTTP_401_UNAUTHORIZED)

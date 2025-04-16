@@ -1,8 +1,8 @@
 db.sqlite3
+curl_test_commands2.sh
 venv/
 
 auth_pro/__pycache__
-
 auth_app/__pycache__
 auth_app/migrations/__pycache__
 auth_app/migrations/0001_initial.py
